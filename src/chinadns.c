@@ -75,8 +75,13 @@ static int verbose = 0;
 static int compression = 0;
 static int bidirectional = 0;
 
-static const char *default_dns_servers =
-"114.114.114.114,223.5.5.5,8.8.8.8,8.8.4.4,208.67.222.222:443,208.67.222.222:5353";
+// 114.114.114.114 电信
+// 223.5.5.5,223.6.6.6 阿里
+// 119.29.29.29 腾讯
+// 8.8.8.8,8.8.4.4 谷歌
+// 208.67.222.222:443,208.67.222.222:5353 opendns
+static const char *default_dns_servers = "114.114.114.114,223.5.5.5,119.29.29.29,8.8.8.8,8.8.4.4,208.67.222.222:443,208.67.222.222:5353";
+
 static char *dns_servers = NULL;
 static int dns_servers_len;
 static int has_chn_dns;
@@ -914,5 +919,3 @@ Forward DNS requests.\n\
 \n\
 Online help: <https://github.com/clowwindy/ChinaDNS>\n");
 }
-
-
