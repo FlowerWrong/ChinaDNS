@@ -146,6 +146,7 @@ static void usage(void);
 // log
 static char *log_file = NULL;
 static char *log_config_file = NULL;
+static char *sh_file = NULL;
 
 #define LOG(s...) slog(0, SLOG_INFO, s)
 #define ERR(s) slog(0, SLOG_ERROR, s)
@@ -218,7 +219,9 @@ int main(int argc, char **argv) {
   }
 
   // slog init
-  slog_init(log_file, log_config_file, 2, 3, 1);
+  if (log_file != NULL && log_config_file != NULL) {
+    slog_init(log_file, log_config_file, 2, 3, 1);
+  }
 
   fd_set readset, errorset;
   int max_fd;
@@ -239,6 +242,14 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   if (0 != dns_init_sockets())
     return EXIT_FAILURE;
+
+  // eg: set DNS to 127.0.0.1 if port is 53
+  if (strcmp(default_listen_port, listen_port) == 0) {
+    if (sh_file != NULL) {
+      printf("exec shell file %s\n", sh_file);
+      system(sh_file);
+    }
+  }
 
   max_fd = MAX(local_sock, remote_sock) + 1;
   while (1) {
@@ -291,7 +302,7 @@ static int setnonblock(int sock) {
 
 static int parse_args(int argc, char **argv) {
   int ch;
-  while ((ch = getopt(argc, argv, "hb:p:s:e:f:l:c:y:dmvVD")) != -1) {
+  while ((ch = getopt(argc, argv, "hb:p:s:e:f:t:l:c:y:dmvVD")) != -1) {
     switch (ch) {
       case 'h':
         usage();
@@ -310,6 +321,9 @@ static int parse_args(int argc, char **argv) {
         break;
       case 'f':
         log_config_file = strdup(optarg);
+        break;
+      case 't':
+        sh_file = strdup(optarg);
         break;
       case 'c':
         chnroute_file = strdup(optarg);
@@ -965,6 +979,7 @@ Forward DNS requests.\n\
   -p BIND_PORT          port that listens, default: 53\n\
   -e LOG_FILE           log file path\n\
   -f LOG_CONFIG_FILE    log config file path\n\
+  -t SH_FILE            shell file path\n\
   -D                    daemon, default: 0\n\
   -s DNS                DNS servers to use, default:\n\
                         114.114.114.114,208.67.222.222:443,8.8.8.8\n\
