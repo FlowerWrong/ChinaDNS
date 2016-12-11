@@ -244,11 +244,9 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
 
   // eg: set DNS to 127.0.0.1 if port is 53
-  if (strcmp(default_listen_port, listen_port) == 0) {
-    if (sh_file != NULL) {
-      printf("exec shell file %s\n", sh_file);
-      system(sh_file);
-    }
+  if (sh_file != NULL) {
+    printf("exec shell file %s\n", sh_file);
+    system(sh_file);
   }
 
   max_fd = MAX(local_sock, remote_sock) + 1;
