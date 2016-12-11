@@ -35,6 +35,8 @@
 
 #include "config.h"
 
+#include "slog.h"
+
 typedef struct {
   uint16_t id;
   struct timeval ts;
@@ -72,6 +74,7 @@ typedef struct {
 static char global_buf[BUF_SIZE];
 static char compression_buf[BUF_SIZE];
 static int verbose = 0;
+static int daemonize = 0;
 static int compression = 0;
 static int bidirectional = 0;
 
@@ -140,40 +143,80 @@ static int remote_sock;
 
 static void usage(void);
 
-#define __LOG(o, t, v, s...) do {                                   \
-  time_t now;                                                       \
-  time(&now);                                                       \
-  char *time_str = ctime(&now);                                     \
-  time_str[strlen(time_str) - 1] = '\0';                            \
-  if (t == 0) {                                                     \
-    if (stdout != o || verbose) {                                   \
-      fprintf(o, "%s ", time_str);                                  \
-      fprintf(o, s);                                                \
-      fflush(o);                                                    \
-    }                                                               \
-  } else if (t == 1) {                                              \
-    fprintf(o, "%s %s:%d ", time_str, __FILE__, __LINE__);          \
-    perror(v);                                                      \
-  }                                                                 \
-} while (0)
+// log
+static char *log_file = NULL;
+static char *log_config_file = NULL;
 
-#define LOG(s...) __LOG(stdout, 0, "_", s)
-#define ERR(s) __LOG(stderr, 1, s, "_")
-#define VERR(s...) __LOG(stderr, 0, "_", s)
+#define LOG(s...) slog(0, SLOG_INFO, s)
+#define ERR(s) slog(0, SLOG_ERROR, s)
+#define VERR(s...) slog(0, SLOG_ERROR, s)
 
 #ifdef DEBUG
-#define DLOG(s...) LOG(s)
-void __gcov_flush(void);
-static void gcov_handler(int signum)
-{
-  __gcov_flush();
-  exit(1);
-}
+#define DLOG(s...) slog(0, SLOG_DEBUG, s)
 #else
 #define DLOG(s...)
 #endif
 
+// daemon
+/*
+ * daemonize.c
+ * This example daemonizes a process, writes a few log messages,
+ * sleeps 20 seconds and terminates afterwards.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <syslog.h>
+
+static void skeleton_daemon() {
+  pid_t pid;
+  /* Fork off the parent process */
+  pid = fork();
+  /* An error occurred */
+  if (pid < 0)
+    exit(EXIT_FAILURE);
+  /* Success: Let the parent terminate */
+  if (pid > 0)
+    exit(EXIT_SUCCESS);
+  /* On success: The child process becomes session leader */
+  if (setsid() < 0)
+    exit(EXIT_FAILURE);
+  /* Catch, ignore and handle signals */
+  //TODO: Implement a working signal handler */
+  signal(SIGCHLD, SIG_IGN);
+  signal(SIGHUP, SIG_IGN);
+  /* Fork off for the second time*/
+  pid = fork();
+  /* An error occurred */
+  if (pid < 0)
+    exit(EXIT_FAILURE);
+  /* Success: Let the parent terminate */
+  if (pid > 0)
+    exit(EXIT_SUCCESS);
+  /* Set new file permissions */
+  umask(0);
+  /* Change the working directory to the root directory */
+  /* or another appropriated directory */
+  chdir("/");
+  /* Close all open file descriptors */
+  int x;
+  for (x = sysconf(_SC_OPEN_MAX); x>0; x--)
+    close(x);
+}
+
 int main(int argc, char **argv) {
+  if (0 != parse_args(argc, argv))
+    return EXIT_FAILURE;
+
+  if (daemonize) {
+    printf("ChinaDNS will be run in daemonize\n");
+    skeleton_daemon();
+  }
+
   fd_set readset, errorset;
   int max_fd;
 
@@ -182,8 +225,7 @@ int main(int argc, char **argv) {
 #endif
 
   memset(&id_addr_queue, 0, sizeof(id_addr_queue));
-  if (0 != parse_args(argc, argv))
-    return EXIT_FAILURE;
+
   if (!compression)
     memset(&delay_queue, 0, sizeof(delay_queue));
   if (0 != parse_ip_list())
@@ -194,6 +236,9 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   if (0 != dns_init_sockets())
     return EXIT_FAILURE;
+
+  // slog init
+  slog_init(log_file, log_config_file, 2, 3, 1);
 
   max_fd = MAX(local_sock, remote_sock) + 1;
   while (1) {
@@ -246,7 +291,7 @@ static int setnonblock(int sock) {
 
 static int parse_args(int argc, char **argv) {
   int ch;
-  while ((ch = getopt(argc, argv, "hb:p:s:l:c:y:dmvV")) != -1) {
+  while ((ch = getopt(argc, argv, "hb:p:s:e:f:l:c:y:dmvVD")) != -1) {
     switch (ch) {
       case 'h':
         usage();
@@ -259,6 +304,12 @@ static int parse_args(int argc, char **argv) {
         break;
       case 's':
         dns_servers = strdup(optarg);
+        break;
+      case 'e':
+        log_file = strdup(optarg);
+        break;
+      case 'f':
+        log_config_file = strdup(optarg);
         break;
       case 'c':
         chnroute_file = strdup(optarg);
@@ -277,6 +328,9 @@ static int parse_args(int argc, char **argv) {
         break;
       case 'v':
         verbose = 1;
+        break;
+      case 'D':
+        daemonize = 1;
         break;
       case 'V':
         printf("ChinaDNS %s\n", PACKAGE_VERSION);
@@ -909,6 +963,9 @@ Forward DNS requests.\n\
   -y                    delay time for suspects, default: 0.3\n\
   -b BIND_ADDR          address that listens, default: 0.0.0.0\n\
   -p BIND_PORT          port that listens, default: 53\n\
+  -e LOG_FILE           log file path\n\
+  -f LOG_CONFIG_FILE    log config file path\n\
+  -D                    daemon, default: 0\n\
   -s DNS                DNS servers to use, default:\n\
                         114.114.114.114,208.67.222.222:443,8.8.8.8\n\
   -m                    use DNS compression pointer mutation\n\
