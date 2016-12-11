@@ -217,6 +217,9 @@ int main(int argc, char **argv) {
     skeleton_daemon();
   }
 
+  // slog init
+  slog_init(log_file, log_config_file, 2, 3, 1);
+
   fd_set readset, errorset;
   int max_fd;
 
@@ -236,9 +239,6 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   if (0 != dns_init_sockets())
     return EXIT_FAILURE;
-
-  // slog init
-  slog_init(log_file, log_config_file, 2, 3, 1);
 
   max_fd = MAX(local_sock, remote_sock) + 1;
   while (1) {
